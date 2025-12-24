@@ -14,7 +14,11 @@ from transformers import (AutoModel, AutoModelForCausalLM, AutoTokenizer,
 
 from utils import _init_dist_pytorch, get_dist_info, get_rank, collect_results_cpu
 from dataset import RESDataset
+import sys
+from pathlib import Path
 
+# 把仓库根目录加进 sys.path，和训练脚本写法一样
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 def parse_args():
     parser = argparse.ArgumentParser(description='RefCocoSeg')
@@ -95,6 +99,8 @@ def mask_to_rle(mask_list):
         rle.append(enc)
     return rle
 
+from projects.llava_sam2.hf.models.modeling_sa2va_chat import Sa2VAChatModel
+from transformers import AutoTokenizer
 
 def main():
     args = parse_args()
@@ -108,13 +114,11 @@ def main():
         world_size = 1
 
     # build model
-    model = AutoModel.from_pretrained(
+    model = Sa2VAChatModel.from_pretrained(
         args.model_path,
         torch_dtype=torch.bfloat16,
         low_cpu_mem_usage=True,
-        use_flash_attn=True,
-        trust_remote_code=True,
-    ).eval().cuda()
+    ).cuda().eval()
 
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_path,

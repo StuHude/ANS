@@ -4,6 +4,8 @@ import os
 import torch
 import tqdm
 from pycocotools import mask as mask_utils
+import numpy as np
+
 
 from transformers import (AutoModel, AutoModelForCausalLM, AutoTokenizer,
                           BitsAndBytesConfig, CLIPImageProcessor,
@@ -128,11 +130,22 @@ def main():
         w, h = data_batch['image'].size
 
         pred_dict = model.predict_forward(**data_batch, tokenizer=tokenizer)
-        if 'prediction_masks' not in pred_dict.keys() or pred_dict['prediction_masks'] is None or len(pred_dict['prediction_masks']) == 0:
+        masks = pred_dict.get('prediction_masks', None)
+        if masks is None or len(masks) == 0:
             print("No SEG !!!")
-            prediction['prediction_masks'] = torch.zeros((0, h, w), dtype=torch.bool)
+            prediction['prediction_masks'] = torch.zeros((0, h, w), dtype=torch.bool, device='cpu')
         else:
-            prediction['prediction_masks'] = torch.stack(pred_dict['prediction_masks'], dim=0)[:, 0]
+            torch_masks = []
+            for m in masks:
+                if isinstance(m, np.ndarray):
+                    m = torch.from_numpy(m)
+                m = m.detach().cpu()
+                torch_masks.append(m)
+            torch_masks = torch.stack(torch_masks, dim=0)  # [N, ..., H, W]
+            if torch_masks.ndim == 4:
+                torch_masks = torch_masks[:, 0]
+            prediction['prediction_masks'] = torch_masks.to(torch.bool)
+
         process_and_save_output(
             args.save_dir,
             prediction['image_file'],
